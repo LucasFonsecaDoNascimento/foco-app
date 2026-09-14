@@ -1,0 +1,58 @@
+name: Build APK Android
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Configurar Java (necessário pro Gradle)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Instalar dependências
+        run: npm install
+
+      - name: Gerar projeto Android nativo (expo prebuild)
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Dar permissão de execução ao gradlew
+        run: chmod +x android/gradlew
+
+      - name: Build do APK (debug, já assinado automaticamente)
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Renomear APK com o número do build
+        run: |
+          mkdir -p dist
+          cp android/app/build/outputs/apk/debug/app-debug.apk "dist/foco-app-${{ github.run_number }}.apk"
+
+      - name: Disponibilizar APK como artefato do workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: foco-app-apk
+          path: dist/*.apk
+
+      - name: Criar Release no GitHub com o APK anexado
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: FocoApp build ${{ github.run_number }}
+          files: dist/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
